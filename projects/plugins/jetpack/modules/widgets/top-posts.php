@@ -708,7 +708,6 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 		if ( 0 === $days || false === $days ) {
 			$days = 2;
 		}
-		echo $days;
 
 		$query_args      = array(
 			'max'       => 11,
