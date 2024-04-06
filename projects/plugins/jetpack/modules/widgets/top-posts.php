@@ -303,8 +303,8 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 		$title = apply_filters( 'widget_title', $title );
 
 		$count = isset( $instance['count'] ) ? (int) $instance['count'] : false;
-		if ( $count < 1 || 10 < $count ) {
-			$count = 10;
+		if ( $count < 1 || 150 < $count ) {
+			$count = 150;
 		}
 		/**
 		 * Control the number of displayed posts.
@@ -365,10 +365,13 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 			$get_image_options = apply_filters( 'jetpack_top_posts_widget_image_options', $get_image_options );
 		}
 
+		$category = isset( $instance['category'] ) ? $instance['category'] : false;
+		$days = isset( $instance['days'] ) ? $instance['days'] : 2;
+
 		if ( function_exists( 'wpl_get_blogs_most_liked_posts' ) && 'likes' === $ordering ) {
-			$posts = $this->get_by_likes( $count, $types );
+			$posts = $this->get_by_likes( $count, $types, $category );
 		} else {
-			$posts = $this->get_by_views( $count, $args, $types );
+			$posts = $this->get_by_views( $count, $args, $types, $category, $days );
 		}
 
 		echo $args['before_widget']; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
@@ -386,7 +389,7 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 				echo self::fallback_message(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 			}
 
-			$posts = $this->get_fallback_posts( $count, $types );
+			$posts = $this->get_fallback_posts( $count, $types, $category );
 		}
 
 		/*
@@ -627,6 +630,8 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 			'types'    => array( 'post', 'page' ),
 			'ordering' => 'views',
 			'display'  => 'text',
+			'category' => false,
+			'days' => absint( 2 )
 		);
 	}
 
@@ -642,13 +647,13 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 	 *
 	 * @return array array of posts.
 	 */
-	public function get_by_likes( $count, $types = array( 'post', 'page' ) ) {
+	public function get_by_likes( $count, $types = array( 'post', 'page' ), $category = false ) {
 		$post_likes = wpl_get_blogs_most_liked_posts();
 		if ( ! $post_likes ) {
 			return array();
 		}
 
-		return $this->get_posts( array_keys( $post_likes ), $count, $types );
+		return $this->get_posts( array_keys( $post_likes ), $count, $types, $category );
 	}
 
 	/**
@@ -662,7 +667,7 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 	 *
 	 * @return array array of posts. Defaults to 'post' and 'page'.
 	 */
-	public function get_by_views( $count, $args, $types = array( 'post', 'page' ) ) {
+	public function get_by_views( $count, $args, $types = array( 'post', 'page' ), $category = false, $days = 2 ) {
 		if ( defined( 'IS_WPCOM' ) && IS_WPCOM ) {
 			$post_views = wp_cache_get( "get_top_posts_$count", 'stats' );
 			if ( false === $post_views ) {
@@ -681,8 +686,7 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 				unset( $post_views[0] );
 				wp_cache_add( "get_top_posts_$count", $post_views, 'stats', 1200 );
 			}
-
-			return $this->get_posts( array_keys( $post_views ), $count, $types );
+			return $this->get_posts( array_keys( $post_views ), $count, $types, $category );
 		}
 
 		/**
@@ -698,7 +702,7 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 		 * @param int 2 Number of days. Default is 2.
 		 * @param array $args The widget arguments.
 		 */
-		$days = (int) apply_filters( 'jetpack_top_posts_days', 2, $args );
+		$days = (int) apply_filters( 'jetpack_top_posts_days', $days, $args );
 
 		/** Handling situations where the number of days makes no sense - allows for unlimited days where $days = -1 */
 		if ( 0 === $days || false === $days ) {
@@ -725,7 +729,7 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 			return array();
 		}
 
-		return $this->get_posts( $post_view_ids, $count, $types );
+		return $this->get_posts( $post_view_ids, $count, $types, $category );
 	}
 
 	/**
@@ -737,7 +741,7 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 	 * @param array $types The post types that should be returned.
 	 * @return array
 	 */
-	public function get_fallback_posts( $count = 10, $types = array( 'post', 'page' ) ) {
+	public function get_fallback_posts( $count = 10, $types = array( 'post', 'page' ), $category = false ) {
 		$post_query = new WP_Query();
 
 		if ( ! is_array( $types ) || empty( $types ) ) {
@@ -758,7 +762,7 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 			return array();
 		}
 
-		return $this->get_posts( $posts, $count, $types );
+		return $this->get_posts( $posts, $count, $types , $category );
 	}
 
 	/**
@@ -771,7 +775,7 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 	 * @param array $types The post types that should be returned. Optional. Defaults to 'post', 'page'.
 	 * @return array
 	 */
-	public function get_posts( $post_ids, $count, $types = array( 'post', 'page' ) ) {
+	public function get_posts( $post_ids, $count, $types = array( 'post', 'page' ), $category = false ) {
 		$counter = 0;
 
 		if ( ! is_array( $types ) || empty( $types ) ) {
@@ -783,6 +787,18 @@ class Jetpack_Top_Posts_Widget extends WP_Widget {
 			$post = get_post( $post_id );
 
 			if ( ! $post ) {
+				continue;
+			}
+			$isValidCat = false;
+			if ($category !== false) {
+				$getCategory = get_the_category($post_id);
+				foreach($getCategory as $cat) {
+					if ($cat->name === $category) {
+						$isValidCat = true;
+					}
+				}
+			}
+			if ($category !== false && !$isValidCat) {
 				continue;
 			}
 
